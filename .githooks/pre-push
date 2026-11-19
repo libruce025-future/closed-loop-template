@@ -3,6 +3,9 @@ set -euo pipefail
 zero="0000000000000000000000000000000000000000"
 while read -r local_ref local_sha remote_ref remote_sha; do
   [[ "$local_sha" == "$zero" ]] && continue
+  # Allow one-time creation of a branch that does not exist on the remote yet
+  # (bootstrapping an empty repo). Later pushes to main are blocked below.
+  [[ "$remote_sha" == "$zero" ]] && continue
   case "$remote_ref" in
     refs/heads/main | refs/heads/master)
       echo "禁止直接推送到 ${remote_ref#refs/heads/}；请开分支并发起 PR。" >&2
