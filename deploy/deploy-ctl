@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Root-owned sudo wrapper. Only these three verbs are allowed.
+# Root-owned sudo wrapper. Only these verbs are allowed.
 set -Eeuo pipefail
 
 BASE="${APP_BASE:-/opt/closed-loop}"
@@ -14,10 +14,9 @@ case "${1:-}" in
     exec bash "$BASE/scripts/deploy-remote.sh" --rollback
     ;;
   status)
-    exec docker compose \
-      --project-directory "$BASE/current" \
-      --env-file "$BASE/deploy.env" \
-      -f "$BASE/current/compose.yml" ps
+    echo "current: $(readlink -f "$BASE/current" 2>/dev/null || echo none)"
+    echo "releases:"
+    ls -1 "$BASE/releases" 2>/dev/null | tail -10
     ;;
   *)
     echo "usage: deploy-ctl {deploy <40-hex-sha>|rollback|status}" >&2

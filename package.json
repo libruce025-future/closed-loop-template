@@ -2,12 +2,13 @@
   "name": "closed-loop-template",
   "version": "0.1.0",
   "private": true,
-  "description": "Requirement -> code -> verify -> PR -> deploy closed loop template",
-  "main": "app/server.js",
+  "type": "module",
+  "description": "Static SPA served by nginx on ECS, delivered through a PR-to-deploy closed loop",
   "scripts": {
-    "start": "node app/server.js",
-    "lint": "node --check app/server.js && node --check app/server.test.js",
-    "test": "node --test app/*.test.js"
+    "build": "node scripts/build.mjs",
+    "lint": "node --check app/src/main.js && node --check scripts/build.mjs && node --check scripts/check-dist.mjs && node --check scripts/serve.mjs",
+    "start": "node scripts/serve.mjs",
+    "test": "node scripts/check-dist.mjs"
   },
   "engines": {
     "node": ">=22"
