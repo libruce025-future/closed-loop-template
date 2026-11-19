@@ -1,0 +1,11 @@
+.git
+.github
+.claude
+.githooks
+node_modules
+deploy
+scripts
+*.log
+.env
+.env.*
+!.env.example

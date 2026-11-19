@@ -1,0 +1,17 @@
+node_modules/
+*.log
+.DS_Store
+
+# secrets: never commit
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+id_ed25519*
+deploy/app.env
+deploy/deploy.env
+
+# local build artifacts
+dist/
+coverage/

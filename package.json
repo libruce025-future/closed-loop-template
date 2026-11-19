@@ -1,0 +1,15 @@
+{
+  "name": "closed-loop-template",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Requirement -> code -> verify -> PR -> deploy closed loop template",
+  "main": "app/server.js",
+  "scripts": {
+    "start": "node app/server.js",
+    "lint": "node --check app/server.js && node --check app/server.test.js",
+    "test": "node --test app/*.test.js"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

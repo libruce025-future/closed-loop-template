@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# Root-owned sudo wrapper. Only these three verbs are allowed.
+set -Eeuo pipefail
+
+BASE="${APP_BASE:-/opt/closed-loop}"
+
+case "${1:-}" in
+  deploy)
+    [[ $# -eq 2 ]] || { echo "usage: deploy-ctl deploy <40-hex-sha>" >&2; exit 64; }
+    exec bash "$BASE/scripts/deploy-remote.sh" "$2"
+    ;;
+  rollback)
+    [[ $# -eq 1 ]] || { echo "usage: deploy-ctl rollback" >&2; exit 64; }
+    exec bash "$BASE/scripts/deploy-remote.sh" --rollback
+    ;;
+  status)
+    exec docker compose \
+      --project-directory "$BASE/current" \
+      --env-file "$BASE/deploy.env" \
+      -f "$BASE/current/compose.yml" ps
+    ;;
+  *)
+    echo "usage: deploy-ctl {deploy <40-hex-sha>|rollback|status}" >&2
+    exit 64
+    ;;
+esac

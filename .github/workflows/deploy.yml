@@ -1,0 +1,90 @@
+name: deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+# Never cancel an in-flight deploy; the server also takes a flock.
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  build:
+    # Stay asleep until the repo variables are configured (see README step 2).
+    if: vars.IMAGE_REGISTRY != '' && vars.IMAGE_REPO != ''
+    runs-on: ubuntu-24.04
+    outputs:
+      sha: ${{ steps.meta.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: meta
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ vars.IMAGE_REGISTRY }}
+          username: ${{ secrets.REGISTRY_USERNAME }}
+          password: ${{ secrets.REGISTRY_PASSWORD }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64
+          push: true
+          build-args: GIT_SHA=${{ steps.meta.outputs.sha }}
+          tags: ${{ vars.IMAGE_REGISTRY }}/${{ vars.IMAGE_REPO }}:${{ steps.meta.outputs.sha }}
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-24.04
+    environment:
+      name: production
+      url: https://${{ vars.DOMAIN }}
+    steps:
+      - name: Deploy over SSH
+        env:
+          ECS_HOST: ${{ secrets.ECS_HOST }}
+          ECS_USER: ${{ secrets.ECS_USER }}
+          ECS_SSH_KEY: ${{ secrets.ECS_SSH_KEY }}
+          ECS_KNOWN_HOSTS: ${{ secrets.ECS_KNOWN_HOSTS }}
+          GIT_SHA: ${{ needs.build.outputs.sha }}
+        run: |
+          set -euo pipefail
+          [[ "$GIT_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "invalid sha" >&2; exit 1; }
+          umask 077
+          printf '%s\n' "$ECS_SSH_KEY" > "$RUNNER_TEMP/deploy_key"
+          printf '%s\n' "$ECS_KNOWN_HOSTS" > "$RUNNER_TEMP/known_hosts"
+          ssh -i "$RUNNER_TEMP/deploy_key" \
+              -o IdentitiesOnly=yes \
+              -o UserKnownHostsFile="$RUNNER_TEMP/known_hosts" \
+              -o StrictHostKeyChecking=yes \
+              -o ConnectTimeout=15 \
+              "$ECS_USER@$ECS_HOST" \
+              "sudo /usr/local/bin/deploy-ctl deploy $GIT_SHA"
+
+      - name: Remote smoke test
+        env:
+          DOMAIN: ${{ vars.DOMAIN }}
+          GIT_SHA: ${{ needs.build.outputs.sha }}
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 20); do
+            got=$(curl -fsS "https://$DOMAIN/version" 2>/dev/null \
+              | sed -n 's/.*"sha":"\([^"]*\)".*/\1/p' || true)
+            if [[ "$got" == "$GIT_SHA" ]]; then
+              echo "smoke ok: sha=$got"
+              exit 0
+            fi
+            sleep 3
+          done
+          echo "smoke failed: expected $GIT_SHA got ${got:-<none>}" >&2
+          exit 1
