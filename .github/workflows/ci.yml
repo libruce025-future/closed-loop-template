@@ -24,23 +24,23 @@ jobs:
       - name: Install
         run: make install
 
-      - name: Lint and test
+      - name: Lint, build and verify dist
         run: make check
 
-      - name: Build image
-        run: |
-          SHA="${{ github.event.pull_request.head.sha || github.sha }}"
-          docker build --build-arg GIT_SHA="$SHA" -t app:ci .
-
-      - name: Container smoke test
+      - name: Serve smoke test
         run: |
           set -euo pipefail
-          docker run -d --name app -p 127.0.0.1:3000:3000 app:ci
-          for i in $(seq 1 30); do
-            if curl -fsS http://127.0.0.1:3000/health >/dev/null 2>&1; then break; fi
+          PORT=3000 node scripts/serve.mjs &
+          pid=$!
+          trap 'kill $pid 2>/dev/null || true' EXIT
+
+          for _ in $(seq 1 20); do
+            if curl -fsS http://127.0.0.1:3000/version.json >/dev/null 2>&1; then break; fi
             sleep 1
           done
-          curl -fsS http://127.0.0.1:3000/health
-          curl -fsS http://127.0.0.1:3000/version
-          docker logs app
-          docker rm -f app
+
+          curl -fsS http://127.0.0.1:3000/ | grep -q '<main id="app">'
+          curl -fsS http://127.0.0.1:3000/version.json \
+            | jq -e --arg sha "$(git rev-parse HEAD)" '.sha == $sha' >/dev/null
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:3000/some/deep/route)" = "200"
+          echo "serve smoke ok"
